@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>Realtime Anonymous Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Palet */
+  --teal-dark:#075E54; --teal:#128C7E; --green:#25D366;
+  --sent:#DCF8C6; --chat:#ECE5DD; --blue:#34B7F1;
+  /* Peran */
+  --outer:#d9d2c8; --bar:#f6f3ee; --recv:#ffffff; --text:#111b21; --time:#5f6f78;
+  --header:var(--teal-dark); --header-text:#ffffff; --focus:var(--teal); --bad:#ff9d8f; --band:var(--teal);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --outer:#060b0e; --chat:#0b141a; --bar:#1f2c34; --recv:#202c33; --sent:var(--teal-dark);
+    --text:#e9edef; --time:#8fa0a9; --focus:var(--green); --band:var(--teal-dark);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  background:var(--outer); color:var(--text);
+  font:16px/1.45 "DM Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  display:flex; justify-content:center; overflow:hidden; -webkit-text-size-adjust:100%;
+}
+.app{
+  position:relative; width:100%; max-width:720px; height:100dvh; display:flex; flex-direction:column;
+  background:var(--chat);
+}
+header{
+  padding:calc(14px + env(safe-area-inset-top,0px)) max(18px,env(safe-area-inset-right,0px)) 14px max(18px,env(safe-area-inset-left,0px));
+  background:var(--header); color:var(--header-text);
+}
+h1{font-size:18px; font-weight:600; display:flex; align-items:center; gap:10px}
+.dot{width:9px; height:9px; border-radius:50%; background:rgba(255,255,255,.5); transition:background .3s}
+.dot.on{background:var(--green)} .dot.off{background:var(--bad)}
+button:focus-visible,textarea:focus-visible,a:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
+
+#log{
+  flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; scroll-behavior:smooth;
+  padding:16px max(14px,env(safe-area-inset-right,0px)) 16px max(14px,env(safe-area-inset-left,0px));
+  display:flex; flex-direction:column; gap:2px;
+  scrollbar-width:thin; scrollbar-color:rgba(95,111,120,.45) transparent;
+}
+.msg{
+  display:flow-root; align-self:flex-start; max-width:82%; margin-top:8px;
+  background:var(--recv); padding:6px 9px 6px 10px; border-radius:10px;
+  white-space:pre-wrap; overflow-wrap:anywhere; box-shadow:0 1px 1px rgba(11,20,26,.14);
+}
+.msg.own{align-self:flex-end; background:var(--sent)}
+.msg.grouped{margin-top:0}
+.msg:not(.grouped){border-top-left-radius:2px}
+.msg.own:not(.grouped){border-top-left-radius:10px; border-top-right-radius:2px}
+.msg.own{color:var(--text)}
+@media (prefers-color-scheme:dark){.msg.own{color:#ffffff}}
+.time{float:right; margin:9px 0 -3px 12px; font-size:11px; color:var(--time); white-space:nowrap}
+.msg.own .time{color:var(--time)}
+@media (prefers-color-scheme:dark){.msg.own .time{color:rgba(255,255,255,.7)}}
+.msg a{color:var(--blue); text-decoration:underline; text-underline-offset:2px}
+.note{margin:auto; text-align:center; color:var(--time); font-size:14px; max-width:36ch}
+.note.err{color:#c9483a}
+@media (prefers-color-scheme:dark){.note.err{color:var(--bad)}}
+
+form.send{
+  display:flex; align-items:flex-end; gap:10px; background:var(--bar);
+  padding:10px max(12px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));
+}
+textarea{
+  flex:1; font:inherit; color:var(--text); background:var(--recv); border:0;
+  border-radius:22px; padding:10px 16px; resize:none; max-height:140px; line-height:1.4;
+}
+textarea::placeholder{color:var(--time)}
+.btn{
+  flex:none; width:44px; height:44px; display:grid; place-items:center; cursor:pointer; border:0; border-radius:50%;
+  background:var(--teal); color:#fff; transition:background .15s;
+}
+.btn:hover:not(:disabled){background:var(--teal-dark)}
+.btn:disabled{opacity:.45; cursor:default}
+/* Desktop: kartu di tengah layar dengan pita teal di belakangnya */
+@media (min-width:760px) and (min-height:560px){
+  body{align-items:center}
+  body::before{content:""; position:fixed; inset:0 0 auto 0; height:132px; background:var(--band)}
+  .app{height:min(92dvh,860px); border-radius:14px; overflow:hidden; box-shadow:0 14px 44px rgba(11,20,26,.24)}
+  .msg{max-width:70%}
+  header{padding-block-start:16px}
+}
+@media (prefers-reduced-motion:reduce){#log{scroll-behavior:auto}.dot,.btn{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1><span class="dot" id="dot" title="Status koneksi"></span>Anonymous</h1>
+  </header>
+  <main id="log" aria-live="polite">
+    <p class="note" id="empty">Belum ada pesan. Tulis yang pertama di bawah.</p>
+  </main>
+  <form class="send" id="form">
+    <textarea id="text" rows="1" maxlength="500" placeholder="Tulis pesan" aria-label="Pesan" autofocus></textarea>
+    <button class="btn" id="submit" type="submit" aria-label="Kirim" disabled>
+      <svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor" aria-hidden="true"><path d="M3.4 20.4 21 12 3.4 3.6v6.5L15 12 3.4 13.9z"/></svg>
+    </button>
+  </form>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, push, onChildAdded, onValue, query, limitToLast, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBSu_p6c6i3PiHftMCwkZHVHl4UbpLfMUs",
+  authDomain: "realtime-chat-4492b.firebaseapp.com",
+  databaseURL: "https://realtime-chat-4492b-default-rtdb.firebaseio.com",
+  projectId: "realtime-chat-4492b",
+  storageBucket: "realtime-chat-4492b.firebasestorage.app",
+  messagingSenderId: "806790609053",
+  appId: "1:806790609053:web:38137b46b86896751e3c74",
+  measurementId: "G-JWCXPHE8B9"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const messagesRef = ref(db, "messages");
+
+const $ = id => document.getElementById(id);
+const log = $("log"), text = $("text"), submit = $("submit"), dot = $("dot");
+
+// ID acak per browser, hanya untuk membedakan pesan sendiri dan pesan orang lain
+let uid = null;
+try { uid = localStorage.getItem("chat:uid"); } catch {}
+if (!uid) {
+  uid = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  try { localStorage.setItem("chat:uid", uid); } catch {}
+}
+
+// Status koneksi
+onValue(ref(db, ".info/connected"), s => {
+  dot.className = "dot " + (s.val() ? "on" : "off");
+  dot.title = s.val() ? "Terhubung" : "Terputus";
+});
+
+// Teks pesan dengan tautan http(s) yang bisa diklik
+function addText(el, s){
+  const re = /https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]/g;
+  let i = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > i) el.append(s.slice(i, m.index));
+    const a = document.createElement("a");
+    a.href = m[0]; a.textContent = m[0];
+    a.target = "_blank"; a.rel = "noopener noreferrer nofollow";
+    el.append(a);
+    i = m.index + m[0].length;
+  }
+  if (i < s.length) el.append(s.slice(i));
+}
+
+// Menampilkan pesan
+let last = null;
+const fmt = t => new Date(t).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+
+function render(m){
+  $("empty")?.remove();
+  const own = m.uid === uid;
+  const t = typeof m.ts === "number" ? m.ts : Date.now();
+  const grouped = last && last.uid === m.uid && t - last.ts < 5 * 60 * 1000;
+  last = { uid: m.uid, ts: t };
+
+  const el = document.createElement("div");
+  el.className = "msg" + (own ? " own" : "") + (grouped ? " grouped" : "");
+  const time = document.createElement("span");
+  time.className = "time";
+  time.textContent = fmt(t);
+  el.append(time);
+  addText(el, String(m.text ?? ""));
+
+  const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 120;
+  log.append(el);
+  if (own || nearBottom) log.scrollTop = log.scrollHeight;
+}
+
+onChildAdded(query(messagesRef, limitToLast(100)), snap => render(snap.val()), err => {
+  log.innerHTML = "";
+  const p = document.createElement("p");
+  p.className = "note err";
+  p.textContent = "Pesan tidak bisa dimuat. Periksa aturan (Rules) Realtime Database di Firebase Console.";
+  log.append(p);
+  console.error(err);
+});
+
+// Mengirim pesan
+function autosize(){
+  text.style.height = "auto";
+  text.style.height = Math.min(text.scrollHeight, 140) + "px";
+  submit.disabled = !text.value.trim();
+}
+text.addEventListener("input", autosize);
+text.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !matchMedia("(pointer:coarse)").matches) { e.preventDefault(); $("form").requestSubmit(); }
+});
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const body = text.value.trim();
+  if (!body) return;
+  text.value = ""; autosize();
+  try {
+    await push(messagesRef, { uid, text: body, ts: serverTimestamp() });
+  } catch (err) {
+    console.error(err);
+    text.value = body; autosize();
+    alert("Pesan gagal terkirim. Periksa koneksi dan aturan database.");
+  }
+});
+</script>
+</body>
+</html>
